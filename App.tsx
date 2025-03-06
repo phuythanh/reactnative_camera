@@ -1,40 +1,27 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import Orientation from 'react-native-orientation-locker';
-
+import { createNativeStackNavigator, NativeStackScreenProps } from '@react-navigation/native-stack';
 import CameraListScreen from './screens/CameraListScreen';
+import CameraViewScreen from './screens/CameraViewScreen';
 import MultiCameraViewScreen from './screens/MultiCameraViewScreen';
-import { Platform } from 'react-native';
+import { Camera } from './screens/cameraStorage';
 
 export type RootStackParamList = {
-  CameraList: undefined;
-  MultiCameraView: { cameras: CameraInfo[] };
+  CameraListScreen: undefined;
+  CameraViewScreen: { camera: Camera };
+  MultiCameraViewScreen: { selectedCameras: Camera[] };
 };
+export type CameraViewScreenProps = NativeStackScreenProps<RootStackParamList, 'CameraViewScreen'>;
+export type MultiCameraViewScreenProps = NativeStackScreenProps<RootStackParamList, 'MultiCameraViewScreen'>;
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
-export interface CameraInfo {
-  name: string;
-  url: string;
-}
-
-const Stack = createStackNavigator<RootStackParamList>();
-const isTV = Platform.isTV;
 const App = () => {
-  useEffect(() => {
-    const setOrientation = async () => {
-      if (isTV) {
-        Orientation.lockToPortrait(); // Lock to Portrait for Xiaomi TV Box
-      }
-    };
-
-    setOrientation();
-  }, []);
-
   return (
     <NavigationContainer>
-      <Stack.Navigator>
-        <Stack.Screen name="CameraList" component={CameraListScreen} options={{ title: 'Select Cameras' }} />
-        <Stack.Screen name="MultiCameraView" component={MultiCameraViewScreen} options={{ title: 'Multi View' }} />
+      <Stack.Navigator initialRouteName="CameraListScreen">
+        <Stack.Screen name="CameraListScreen" component={CameraListScreen} options={{ title: 'Cameras' }} />
+        <Stack.Screen name="CameraViewScreen" component={CameraViewScreen} options={{ title: 'Camera View' }} />
+        <Stack.Screen name="MultiCameraViewScreen" component={MultiCameraViewScreen} options={{ title: 'Multi Camera View' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

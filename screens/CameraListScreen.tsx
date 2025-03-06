@@ -1,141 +1,216 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, Alert, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import React, {useEffect, useState} from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  Alert,
+  StyleSheet,
+} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {
+  loadCameras,
+  saveCameras,
+  DEFAULT_CAMERA,
+  Camera,
+} from './cameraStorage';
+import {RootStackParamList} from '../App';
 
-// Define the navigation types
-type RootStackParamList = {
-  CameraList: undefined;
-  MultiCameraView: { cameras: { name: string; url: string }[] };
-};
+// Define navigation type
+type NavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'CameraListScreen'
+>;
 
-type Props = NativeStackScreenProps<RootStackParamList, 'CameraList'>;
-
-const CameraListScreen: React.FC<Props> = ({ navigation }) => {
-  const [cameras, setCameras] = useState<{ name: string; url: string }[]>([]);
-  const [newCamera, setNewCamera] = useState({ name: '', url: '' });
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+const CameraListScreen = () => {
+  const navigation = useNavigation<NavigationProp>();
+  const [cameras, setCameras] = useState<Camera[]>([]);
+  const [selectedCameras, setSelectedCameras] = useState<Camera[]>([]);
+  const [newCamera, setNewCamera] = useState<Camera>({
+    host: '',
+    port: 0,
+    deviceName: '',
+    username: '',
+    password: '',
+  });
 
   useEffect(() => {
-    loadCameras();
+    const fetchCameras = async () => {
+      const storedCameras = await loadCameras();
+      if (storedCameras.length === 0) {
+        await saveCameras([DEFAULT_CAMERA]);
+        setCameras([DEFAULT_CAMERA]);
+      } else {
+        setCameras(storedCameras);
+      }
+    };
+    fetchCameras();
   }, []);
 
-  const loadCameras = async () => {
-    const storedCameras = await AsyncStorage.getItem('cameras');
-    if (storedCameras) {
-      setCameras(JSON.parse(storedCameras));
-    }
+  const toggleSelectCamera = (camera: Camera) => {
+    setSelectedCameras(prevSelected =>
+      prevSelected.some(c => c.deviceName === camera.deviceName)
+        ? prevSelected.filter(c => c.deviceName !== camera.deviceName)
+        : [...prevSelected, camera],
+    );
   };
 
-  const saveCameras = async (updatedCameras: { name: string; url: string }[]) => {
-    setCameras(updatedCameras);
-    await AsyncStorage.setItem('cameras', JSON.stringify(updatedCameras));
-  };
-
-  const addCamera = async () => {
-    if (!newCamera.name || !newCamera.url) {
-      Alert.alert('Error', 'Please enter both name and URL');
+  const addCamera = () => {
+    if (
+      !newCamera.host ||
+      !newCamera.port ||
+      !newCamera.deviceName ||
+      !newCamera.username
+    ) {
+      Alert.alert('Error', 'Please fill all fields!');
       return;
     }
+
     const updatedCameras = [...cameras, newCamera];
-    await saveCameras(updatedCameras);
-    setNewCamera({ name: '', url: '' });
+    saveCameras(updatedCameras);
+    setCameras(updatedCameras);
+    setNewCamera({
+      host: '',
+      port: 0,
+      deviceName: '',
+      username: '',
+      password: '',
+    });
   };
 
-  const editCamera = (index: number) => {
-    setNewCamera(cameras[index]);
-    setEditingIndex(index);
-  };
-
-  const updateCamera = async () => {
-    if (editingIndex === null) return;
-    if (!newCamera.name || !newCamera.url) {
-      Alert.alert('Error', 'Please enter both name and URL');
-      return;
-    }
-    const updatedCameras = [...cameras];
-    updatedCameras[editingIndex] = newCamera;
-    await saveCameras(updatedCameras);
-    setNewCamera({ name: '', url: '' });
-    setEditingIndex(null);
-  };
-
-  const deleteCamera = async (index: number) => {
-    Alert.alert('Delete Camera', 'Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', onPress: async () => {
-          const updatedCameras = cameras.filter((_, i) => i !== index);
-          await saveCameras(updatedCameras);
-        } 
-      },
-    ]);
+  const deleteCamera = (deviceName: string) => {
+    const updatedCameras = cameras.filter(
+      camera => camera.deviceName !== deviceName,
+    );
+    saveCameras(updatedCameras);
+    setCameras(updatedCameras);
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>{editingIndex !== null ? 'Edit Camera' : 'Add a Camera'}</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Camera Name"
-        value={newCamera.name}
-        onChangeText={(text) => setNewCamera({ ...newCamera, name: text })}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="RTSP URL"
-        value={newCamera.url}
-        onChangeText={(text) => setNewCamera({ ...newCamera, url: text })}
-      />
-      {editingIndex !== null ? (
-        <TouchableOpacity style={styles.updateButton} onPress={updateCamera}>
-          <Text style={styles.buttonText}>Update Camera</Text>
-        </TouchableOpacity>
-      ) : (
-        <TouchableOpacity style={styles.addButton} onPress={addCamera}>
-          <Text style={styles.buttonText}>Add Camera</Text>
-        </TouchableOpacity>
-      )}
+      <Text style={styles.title}>Select Cameras</Text>
 
       <FlatList
         data={cameras}
-        keyExtractor={(item) => item.url}
-        renderItem={({ item, index }) => (
-          <View style={styles.cameraItem}>
-            <Text style={styles.cameraText}>{item.name}</Text>
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.editButton} onPress={() => editCamera(index)}>
-                <Text style={styles.buttonText}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteButton} onPress={() => deleteCamera(index)}>
-                <Text style={styles.buttonText}>Delete</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.viewButton}
-                onPress={() => navigation.navigate('MultiCameraView', { cameras })}
-              >
-                <Text style={styles.buttonText}>View</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        keyExtractor={item => item.deviceName}
+        renderItem={({item}) => (
+          <TouchableOpacity
+            onPress={() => toggleSelectCamera(item)}
+            onLongPress={() => deleteCamera(item.deviceName)}
+            style={[
+              styles.cameraItem,
+              selectedCameras.some(c => c.deviceName === item.deviceName) &&
+                styles.selectedCamera,
+            ]}>
+            <Text style={styles.cameraText}>{item.deviceName}</Text>
+          </TouchableOpacity>
         )}
       />
+
+      {/* Add New Camera Form */}
+      <View style={styles.form}>
+        <Text style={styles.formTitle}>Add New Camera</Text>
+        <TextInput
+          placeholder="Host"
+          value={newCamera.host}
+          onChangeText={text => setNewCamera({...newCamera, host: text})}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Port"
+          keyboardType="numeric"
+          value={newCamera.port ? String(newCamera.port) : ''}
+          onChangeText={text =>
+            setNewCamera({...newCamera, port: Number(text)})
+          }
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Device Name"
+          value={newCamera.deviceName}
+          onChangeText={text => setNewCamera({...newCamera, deviceName: text})}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Username"
+          value={newCamera.username}
+          onChangeText={text => setNewCamera({...newCamera, username: text})}
+          style={styles.input}
+        />
+        <TextInput
+          placeholder="Password (Optional)"
+          secureTextEntry
+          value={newCamera.password}
+          onChangeText={text => setNewCamera({...newCamera, password: text})}
+          style={styles.input}
+        />
+        <TouchableOpacity onPress={addCamera} style={styles.addButton}>
+          <Text style={styles.buttonText}>Add Camera</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Navigate to Multi-Camera View */}
+      <TouchableOpacity
+        onPress={() =>
+          navigation.navigate('MultiCameraViewScreen', {selectedCameras})
+        }
+        style={styles.viewButton}>
+        <Text style={styles.buttonText}>View Selected Cameras</Text>
+      </TouchableOpacity>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 10 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, marginBottom: 10, borderRadius: 5 },
-  addButton: { backgroundColor: '#007BFF', padding: 10, borderRadius: 5, alignItems: 'center' },
-  updateButton: { backgroundColor: '#28a745', padding: 10, borderRadius: 5, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: 'bold' },
-  cameraItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: '#ddd' },
-  cameraText: { fontSize: 16 },
-  buttonContainer: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 10 },
-  editButton: { backgroundColor: '#ffc107', padding: 8, borderRadius: 5 },
-  deleteButton: { backgroundColor: '#dc3545', padding: 8, borderRadius: 5 },
-  viewButton: { backgroundColor: '#007BFF', padding: 8, borderRadius: 5 },
-});
-
 export default CameraListScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  cameraItem: {
+    padding: 10,
+    marginVertical: 5,
+    backgroundColor: 'gray',
+  },
+  selectedCamera: {
+    backgroundColor: 'green',
+  },
+  cameraText: {
+    color: 'white',
+  },
+  form: {
+    marginTop: 20,
+  },
+  formTitle: {
+    fontWeight: 'bold',
+    fontSize: 18,
+  },
+  input: {
+    borderWidth: 1,
+    marginBottom: 5,
+    padding: 8,
+  },
+  addButton: {
+    backgroundColor: 'blue',
+    padding: 10,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  viewButton: {
+    backgroundColor: 'blue',
+    padding: 15,
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 18,
+  },
+});

@@ -1,30 +1,95 @@
-import React from 'react';
-import { View, FlatList, StyleSheet } from 'react-native';
-import Video from 'react-native-video';
+import React, {useEffect, useState} from 'react';
+import {View, Text, ScrollView, StyleSheet} from 'react-native';
+import {RouteProp, useRoute} from '@react-navigation/native';
+import {loadCameras, Camera} from './cameraStorage';
+import {VLCPlayer} from 'react-native-vlc-media-player';
+import {RootStackParamList} from '../App';
 
-const MultiCameraViewScreen = ({ route }:any) => {
-  const { cameras } = route.params;
+// Define route prop type
+type MultiCameraViewScreenRouteProp = RouteProp<
+  RootStackParamList,
+  'MultiCameraViewScreen'
+>;
+
+const MultiCameraViewScreen = () => {
+  const route = useRoute<MultiCameraViewScreenRouteProp>();
+  const [cameras, setCameras] = useState<Camera[]>([]);
+
+  useEffect(() => {
+    const fetchCameras = async () => {
+      if (route.params?.selectedCameras?.length) {
+        setCameras(route.params.selectedCameras);
+      } else {
+        const storedCameras = await loadCameras();
+        setCameras(storedCameras);
+      }
+    };
+    fetchCameras();
+  }, [route.params?.selectedCameras]);
 
   return (
-    <View style={styles.container}>
-      <FlatList
-        data={cameras}
-        keyExtractor={(item) => item.url}
-        numColumns={2}
-        renderItem={({ item }) => (
-          <View style={styles.videoContainer}>
-            <Video source={{ uri: item.url }} style={styles.video} resizeMode="cover" controls />
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Multi-Camera View</Text>
+      {cameras.length === 0 ? (
+        <Text style={styles.noCameraText}>No cameras selected.</Text>
+      ) : (
+        cameras.map(camera => (
+          <View key={camera.deviceName} style={styles.cameraContainer}>
+            <Text style={styles.cameraTitle}>{camera.deviceName}</Text>
+            <VLCPlayer
+              style={styles.videoPlayer}
+              source={{
+                uri: `rtsp://${camera.username}:${camera.password}@${camera.host}:${camera.port}/live`,
+              }}
+              resizeMode="contain"
+              autoplay={true}
+              autoAspectRatio={true}
+              onError={e =>
+                console.log(`Error loading camera ${camera.deviceName}:`, e)
+              }
+              onEnd={() =>
+                console.log(
+                  `Stream ended for ${camera.deviceName}, retrying...`,
+                )
+              }
+            />
           </View>
-        )}
-      />
-    </View>
+        ))
+      )}
+    </ScrollView>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  videoContainer: { flex: 1, aspectRatio: 1 },
-  video: { width: '100%', height: '100%' },
-});
-
 export default MultiCameraViewScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  noCameraText: {
+    fontSize: 16,
+    color: 'red',
+    marginTop: 20,
+  },
+  cameraContainer: {
+    width: '100%',
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  cameraTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  videoPlayer: {
+    width: 300,
+    height: 200,
+    backgroundColor: 'black',
+  },
+});
